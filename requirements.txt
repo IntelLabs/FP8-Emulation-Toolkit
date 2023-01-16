@@ -1,0 +1,6 @@
+requests    
+scipy       
+setuptools  
+torch       
+torchaudio  
+torchvision 
