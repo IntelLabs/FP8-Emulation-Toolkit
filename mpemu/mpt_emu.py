@@ -17,6 +17,7 @@ from .qutils import quantize_model_weights,set_quantize_weights_flag
 from .e5m2_emu import E5M2Emulator
 from .e4m3_emu import E4M3Emulator
 from .e3m4_emu import E3M4Emulator
+from .hybrid_emu import HybridEmulator
 from .bfloat16_emu import Bfloat16Emulator
 from .scale_shift import replace_batchnorms_with_scaleshifts
 from .module_wrappers import SparseLinear, SparseConv2d 
@@ -26,15 +27,19 @@ from .sparse_utils import SparseConfig
 Mixed Precision Emulator
 '''
 class MPTEmulator(object):
-    def __init__(self, device='cuda', dtype='fp16', hw_patch='none', pruning_algo='none'):
+    def __init__(self, device='cuda', training_algo='direct', hw_patch='none', pruning_algo='none'):
         super(MPTEmulator, self).__init__()
-        self.valid_dtypes = ["fp32", "fp16", "bf16", "e5m2", "e4m3", "e3m4"]
+        #self.valid_dtypes = ["fp32", "fp16", "bf16", "e5m2", "e4m3", "e3m4"]
+        self.valid_training_methods = ["direct", "hybrid"]
         self.valid_hw_patches = ["none", "simple"]
         self.valid_pruning_methods = ["none", "fine-grained", "unstructured", "adaptive", 'auto']
         # basic checks  
-        if dtype.lower() not in self.valid_dtypes: 
-            raise RuntimeError("mpt_emulator: the requested data type {} is not supported, use one of the following: {}"
-                    .format(dtype, self.valid_dtypes))
+        #if dtype.lower() not in self.valid_dtypes: 
+        #    raise RuntimeError("mpt_emulator: the requested data type {} is not supported, use one of the following: {}"
+        #            .format(dtype, self.valid_dtypes))
+        if training_algo.lower() not in self.valid_training_methods:
+            raise RuntimeError("mpt_emulator: the requested training method {} is not supported, use one of the following: {}"
+                    .format(hw_patch, self.valid_training_methods))
         if hw_patch.lower() not in self.valid_hw_patches:
             raise RuntimeError("mpt_emulator: the requested hardware emulation {} is not supported, use one of the following: {}"
                     .format(hw_patch, self.valid_hw_patches))
@@ -43,7 +48,7 @@ class MPTEmulator(object):
                 .format(pruning_algo.lower(), self.valid_pruning_methods))
 
         self.device = device
-        self.dtype = dtype.lower()
+        self.training_algo = training_algo.lower()
         self.hw_patch = hw_patch.lower()
         self.pruning_method = pruning_algo.lower()
         self.wt_sparsity = 0.5
@@ -99,7 +104,11 @@ class MPTEmulator(object):
             print("mpt-emulator: set_target_sparsity_gradient has no effect; sparse training is not enabled")
 
     def fuse_bnlayers_and_quantize_model(self, model):
+        self.emulator.is_training = False
         return self.emulator.fuse_layers_and_quantize_model(model)
+
+    def set_calibration_qconfig(self):
+        self.emulator.set_calibration_qconfig()
 
     def set_default_inference_qconfig(self):
         self.emulator.set_default_inference_qconfig()
@@ -134,16 +143,14 @@ def rewrite_model_with_adasparse_ops(model, exempt_layers):
                 setattr(model, name, module)
     return model
 
-def initialize(model, optimizer, dtype='fp16', hw_patch='none', pruning_algo='none',
+def initialize(model, optimizer, training_algo='direct', hw_patch='none', pruning_algo='none',
         list_exempt_layers=None, list_layers_output_fused=None, device="cuda", verbose=False ):
     if model is None: #or optimizer is None:
         raise RuntimeError("mpt_emulator: Undefined model and optimizer, call this after model and optimizer are initilized.")
-    if dtype == 'fp16' and device != 'cuda':
-        raise RuntimeError("mpt_emulator: the requested data type {} is not supported on {}.".format(dtype, device))
     if device == 'cuda' and hw_patch.lower() != 'none':
         raise RuntimeError("mpt_emulator: HW patching ops is only alowed on 'cpu' device.")
 
-    mpt = MPTEmulator(device=device, dtype=dtype, hw_patch=hw_patch, pruning_algo=pruning_algo) 
+    mpt = MPTEmulator(device=device, training_algo=training_algo, hw_patch=hw_patch, pruning_algo=pruning_algo) 
 
     if mpt.pruning_method == 'adaptive':
         model = rewrite_model_with_adasparse_ops(model, list_exempt_layers)
@@ -166,7 +173,10 @@ def initialize(model, optimizer, dtype='fp16', hw_patch='none', pruning_algo='no
         print("mpt_emulator: Auto pruning method enabled; Adaptive(weights), Stochastic(gradients : {})."
                 .format(mpt.sparse_config.outgrad_factor))
 
-    if dtype.upper() == 'E5M2':
+    if mpt.training_algo == 'hybrid':
+        mpt.emulator = HybridEmulator(model, optimizer, mpt.sparse_config, device=device, verbose=verbose)
+        mpt.emulator.set_master_param_precision("fp16")
+    else: # direct
         mpt.emulator = E5M2Emulator(model, optimizer, mpt.sparse_config, device=device, verbose=verbose)
         mpt.emulator.set_master_param_precision("fp16")
 
@@ -180,7 +190,7 @@ def initialize(model, optimizer, dtype='fp16', hw_patch='none', pruning_algo='no
 
     return model, mpt
 
-def quantize_model(model, optimizer=None, dtype="none", hw_patch="none", fuse_bn=False,
+def quantize_model(model, optimizer=None, dtype="none", calibrate=False, hw_patch="none", fuse_bn=False,
         list_exempt_layers=None, list_layers_output_fused=None, device="cuda", verbose=False ):
     if model is None :
         raise RuntimeError("mpt_emulator: Undefined model , call this after model is initilized.")
@@ -189,24 +199,31 @@ def quantize_model(model, optimizer=None, dtype="none", hw_patch="none", fuse_bn
     if device == 'cuda' and hw_patch.lower() != 'none':
         raise RuntimeError("mpt_emulator: HW patching ops is only alowed on 'cpu' device.")
 
-    mpt = MPTEmulator(device=device, dtype=dtype, hw_patch=hw_patch) 
+    mpt = MPTEmulator(device=device, hw_patch=hw_patch) 
     if fuse_bn :
         model = mpt.fuse_bnlayers_and_quantize_model(model)
 
     if dtype.upper() == 'E5M2':
         mpt.emulator = E5M2Emulator(model, optimizer, None, device=device, verbose=verbose)
-        mpt.set_default_inference_qconfig()
     elif dtype.upper() == 'E4M3':
         mpt.emulator = E4M3Emulator(model, optimizer, None, device=device, verbose=verbose)
-        mpt.set_default_inference_qconfig()
     elif dtype.upper() == 'E3M4':
         mpt.emulator = E3M4Emulator(model, optimizer, None, device=device, verbose=verbose)
+    elif dtype.upper() == 'HYBRID':
+        mpt.emulator = HybridEmulator(model, optimizer, None, device=device, verbose=verbose)
+
+    if calibrate:
+        print("mpt_emulator : preparing model for calibration") 
+        mpt.emulator.is_training = False
+        mpt.set_calibration_qconfig()
+    else:
+        mpt.emulator.is_training = False
         mpt.set_default_inference_qconfig()
 
     mpt.emulator.enable_hw_patching(mpt.hw_patch.upper())
     mpt.emulator.prepare_model(model, list_exempt_layers, list_layers_output_fused)
     if mpt.emulator.patch_ops == True and len(mpt.emulator.list_unpatched):  
-        print("mpt_emulator: Following layers are not HW_PATCH'ed because thier dimensions do not match the hardware : {} ".format(mpt.emulator.list_unpatched))
+        print("mpt_emulator: Following layers are not HW_PATCH'ed they cannot use the hardware configuration: {} ".format(mpt.emulator.list_unpatched))
 
     if verbose :
         mpt.emulator.print_config()

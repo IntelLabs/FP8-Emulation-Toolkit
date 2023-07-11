@@ -370,16 +370,6 @@ class Bfloat16Emulator(object):
         fused_model = fused_model.to(self.device)
         return fused_model
 
-    def disable_datatype_emulation(self):
-        self.data_emulation = False
-        self.emb_qconfig    = None 
-        self.wt_qconfig     = None
-        self.iact_qconfig   = None
-        self.oact_qconfig   = None
-        self.igrad_qconfig  = None
-        self.ograd_qconfig  = None
-        self.wtgrad_qconfig = None
-
     def print_config(self):
         for key in self.model_qconfig_dict:
             print("{} {:40s}".format(self.model_qconfig_dict[key], key))
@@ -390,69 +380,3 @@ class Bfloat16Emulator(object):
             train_infer = "training"
         return "[Configured to run {} on {}, using AMP: {}]".format(str(train_infer), self.device, str(self.using_apex))
 
-'''
-
-'''
-def prepare_model_for_training(model, optimizer, list_exempt_layers=None, list_layers_output_fused=None,
-        master_params='fp32', emb_precision='fp32', emb_norm=False, device="cuda", patch_ops='None', 
-        verbose=False, tensor_stats=False, list_bindump_schedule=None ):
-
-    if model is None or optimizer is None:
-        raise RuntimeError("bfloat16_emulator: Undefined model and optimizer, call this after model and optimizer are initilized.")
-
-    if device == 'cuda' and patch_ops != 'None':
-        raise RuntimeError("bfloat16_emulator: Patching tmul/dpas ops is only alowed on 'cpu' device.")
-
-    if verbose :
-        print("bfloat16_emulator: Initializing bfloat16 mixed precision training..")
-        if list_exempt_layers is not None:
-            print("bfloat16_emulator: The following layers are excluded : {}".format(list_exempt_layers))
-        if list_layers_output_fused is not None:
-            print("bfloat16_emulator: The output is not converted to {} for the following layers : {}".format("bfloat16", list_layers_output_fused))
-
-    emulator = Bfloat16Emulator(model, optimizer, device=device, verbose=verbose, tensor_stats=tensor_stats)
-    emulator.enable_hw_patching(patch_ops)
-    if tensor_stats :
-        emulator.enable_tensor_stats()
-    emulator.set_tensor_bindump_schedule(list_bindump_schedule)
-    emulator.set_master_param_precision(master_params)
-    emulator.set_embedding_precision(emb_precision, emb_norm)
-
-    emulator.prepare_model(model, list_exempt_layers, list_layers_output_fused)
-
-    if emulator.patch_ops == True and len(emulator.list_unpatched):  
-        print("bfloat16_emulator: Following layers are not HW_PATCH'ed because thier dimensions do not match the hardware : {} ".format(emulator.list_unpatched))
-
-    if emulator.verbose :
-        emulator.print_config()
-
-    return model, emulator
-
-def prepare_model_for_inference(model, list_exempt_layers=None, device="cuda", verbose=False):
-    if verbose :
-        print("Initializing bfloat16 configuration for inference..")
-    emulator = Bfloat16Emulator(model, None, device=device, verbose=verbose)
-    emulator.emb_qconfig  = TensorQuantConfig("bfloat16", "rne")
-    emulator.oact_qconfig = None
-    emulator.prepare_model(model, list_exempt_layers, None)
-    '''
-    # preparing model for calibration
-    prev_name = None
-    prev_module = None
-    for name,module in model.named_modules():
-        if type(module) == torch.nn.BatchNorm2d \
-            and prev_name in emulator.model_qconfig_dict \
-            and emulator.model_qconfig_dict[prev_name].oact_qconfig is not None:
-            # shifting the output quantization of BatchNorm
-            assert type(prev_module) == torch.nn.Conv2d
-            emulator.model_qconfig_dict[name] = ModuleQuantConfig(
-                          oact_qconfig=emulator.model_qconfig_dict[prev_name].oact_qconfig,
-                          patch_ops=emulator.patch_ops)
-            emulator.model_qconfig_dict[prev_name].oact_qconfig = None
-        # storing previous module info
-        prev_name = name
-        prev_module = module
-    '''
-    if emulator.verbose :
-        emulator.print_config()
-    return model, emulator

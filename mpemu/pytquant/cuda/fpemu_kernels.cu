@@ -982,6 +982,47 @@ namespace {
       __half2anyfloat (h.f * scale_reciprocal, &out[gid]);
     }
   }
+
+  template < typename scalar_t >
+    __global__ void FP4_Nearest_Kernel (const scalar_t * __restrict__ in,
+		       scalar_t * __restrict__ out,
+	               const int size,
+		       const scalar_t in_scale,
+		       bool block_norm) {
+    extern __shared__ float sdata[];
+    float scale = in_scale;
+
+    if (block_norm == true) {
+      absmax_block (in, sdata, size);
+      /* FP4 max value is 1.0 */
+      scale = 1.0/sdata[0];
+    }
+    float scale_reciprocal = 1.0 / scale;
+
+    for (int gid = (blockIdx.x * blockDim.x) + threadIdx.x; gid < size;
+	 gid += blockDim.x * gridDim.x) {
+      __float_t f;
+      float inval = scale * in[gid];
+
+      f.f = inval;
+      int exp_f = (int)((f.u & 0x7F800000) >> 23) - 127;
+      int sign_f = (f.u & 0x80000000);
+      /* see if round up works! */
+      if (exp_f < 0 && (exp_f%2)) f.f *= 1.6;
+      /* saturate */
+      if (exp_f > 0) f.u = (sign_f | (127 << 23));
+      f.u &= 0xFF800000;
+      /* extract the new exponent */
+      exp_f = (int)(((f.u & 0x7F800000) >> 23) - 127);
+      /* round up did not work, round down */
+      if (exp_f < 0 && (exp_f%2)) f.u = (sign_f | ((exp_f + 126) << 23));
+      /* flush values smaller than 2^-12 to zero */
+      if (exp_f < -12) f.u = 0;
+
+      out[gid] = (f.f * scale_reciprocal);
+    }
+  }
+
 }
 
 std::vector<torch::Tensor> fpemu_cuda_forward(
@@ -1320,6 +1361,17 @@ std::vector<torch::Tensor> fpemu_cuda_forward(
 	cudaDeviceSynchronize();
 	AT_CUDA_CHECK(cudaGetLastError());
 
+  } else if (!mode.compare("FP4_NEAREST")) {
+  	AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.scalar_type(), "FP4_NEAREST", ([&] {
+    	FP4_Nearest_Kernel <scalar_t><<<blocks, threads, sdata_size>>>(
+        	input.data_ptr<scalar_t>(),
+  		(inplace) ? input.data_ptr<scalar_t>() : output.data_ptr<scalar_t>(),
+        	size, 
+		scale,
+            	block_norm);
+  	}));
+	cudaDeviceSynchronize();
+	AT_CUDA_CHECK(cudaGetLastError());
   }
   if (!inplace) {
     return {output, }; 
