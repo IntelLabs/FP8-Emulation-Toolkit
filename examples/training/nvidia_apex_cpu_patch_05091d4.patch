@@ -1,0 +1,96 @@
+diff --git a/apex/amp/_initialize.py b/apex/amp/_initialize.py
+index 3ae6fde..04be0ae 100644
+--- a/apex/amp/_initialize.py
++++ b/apex/amp/_initialize.py
+@@ -87,12 +87,14 @@ def check_params_fp32(models):
+                         "When using amp.initialize, you do not need to call .half() on your model\n"
+                         "before passing it, no matter what optimization level you choose.".format(
+                         name, param.type()))
++                '''
+                 elif not param.is_cuda:
+                     warn_or_err("Found param {} with type {}, expected torch.cuda.FloatTensor.\n"
+                         "When using amp.initialize, you need to provide a model with parameters\n"
+                         "located on a CUDA device before passing it no matter what optimization level\n"
+                         "you chose. Use model.to('cuda') to use the default device.".format(
+                         name, param.type()))
++                '''
+ 
+         # Backward compatibility for PyTorch 0.4
+         if hasattr(model, 'named_buffers'):
+@@ -110,12 +112,14 @@ def check_params_fp32(models):
+                         "When using amp.initialize, you do not need to call .half() on your model\n"
+                         "before passing it, no matter what optimization level you choose.".format(
+                         name, buf.type()))
++                '''
+                 elif not buf.is_cuda:
+                     warn_or_err("Found buffer {} with type {}, expected torch.cuda.FloatTensor.\n"
+                         "When using amp.initialize, you need to provide a model with buffers\n"
+                         "located on a CUDA device before passing it no matter what optimization level\n"
+                         "you chose. Use model.to('cuda') to use the default device.".format(
+                         name, buf.type()))
++                '''
+ 
+ 
+ def check_optimizers(optimizers):
+diff --git a/apex/amp/_process_optimizer.py b/apex/amp/_process_optimizer.py
+index 471289b..3d72008 100644
+--- a/apex/amp/_process_optimizer.py
++++ b/apex/amp/_process_optimizer.py
+@@ -54,6 +54,9 @@ def lazy_init_with_master_weights(self):
+                         #             .format(param.size()))
+                         fp32_params_this_group.append(param)
+                         param_group['params'][i] = param
++                    elif param.type() == 'torch.FloatTensor':
++                        fp32_params_this_group.append(param)
++                        param_group['params'][i] = param
+                     else:
+                         raise TypeError("Optimizer's parameters must be either "
+                                         "torch.cuda.FloatTensor or torch.cuda.HalfTensor. "
+@@ -212,6 +215,8 @@ def lazy_init_no_master_weights(self):
+                 stash.all_fp16_params.append(param)
+             elif param.type() == 'torch.cuda.FloatTensor':
+                 stash.all_fp32_params.append(param)
++            elif param.type() == 'torch.FloatTensor':
++                stash.all_fp32_params.append(param)
+             else:
+                 raise TypeError("Optimizer's parameters must be either "
+                                 "torch.cuda.FloatTensor or torch.cuda.HalfTensor. "
+diff --git a/apex/amp/scaler.py b/apex/amp/scaler.py
+index 99888bc..cbf0f22 100644
+--- a/apex/amp/scaler.py
++++ b/apex/amp/scaler.py
+@@ -6,7 +6,11 @@ from itertools import product
+ def scale_check_overflow_python(model_grad, master_grad, scale, check_overflow=False):
+     # Exception handling for 18.04 compatibility
+     if check_overflow:
+-        cpu_sum = float(model_grad.float().sum())
++        # handling sparse gradients
++        if (model_grad.is_sparse) :
++            cpu_sum = torch.sparse.sum(model_grad)
++        else :
++            cpu_sum = float(model_grad.float().sum())
+         if cpu_sum == float('inf') or cpu_sum == -float('inf') or cpu_sum != cpu_sum:
+             return True
+ 
+@@ -19,7 +23,11 @@ def scale_check_overflow_python(model_grad, master_grad, scale, check_overflow=F
+ def axpby_check_overflow_python(model_grad, stashed_grad, master_grad, a, b, check_overflow=False):
+     # Exception handling for 18.04 compatibility
+     if check_overflow:
+-        cpu_sum = float(model_grad.float().sum())
++        # handling sparse gradients
++        if (model_grad.is_sparse) :
++            cpu_sum = torch.sparse.sum(model_grad)
++        else:
++            cpu_sum = float(model_grad.float().sum())
+         if cpu_sum == float('inf') or cpu_sum == -float('inf') or cpu_sum != cpu_sum:
+             return True
+ 
+@@ -53,7 +61,7 @@ class LossScaler(object):
+         self._scale_seq_len = scale_window
+         self._unskipped = 0
+         self._has_overflow = False
+-        self._overflow_buf = torch.cuda.IntTensor([0])
++        self._overflow_buf = torch.IntTensor([0])
+         if multi_tensor_applier.available:
+             import amp_C
+             LossScaler.has_fused_kernel = multi_tensor_applier.available
