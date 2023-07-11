@@ -20,21 +20,33 @@ from .stats_collector import TensorDumpListWrapper
  Quantization configuration for a tensor
 """
 class TensorQuantConfig(object):
-    def __init__(self, dtype=None, scheme=None, scaling="None"):
+    def __init__(self, dtype=None, scheme=None, scaling="None", group_size=1):
         super(TensorQuantConfig, self).__init__()
         self.dtype = dtype
         self.scheme = scheme
-        self.scaling = True if scaling in ["per-tensor", "per-channel"] else False
-        self.per_channel = True if scaling == "per-channel" else False
+        #self.scaling = True if scaling in ["per-tensor", "per-channel"] else False
+        #self.per_channel = True if scaling == "per-channel" else False
+        self.scaling = True if "tensor" in scaling.split("-") else False
+        self.per_channel = True if "channel" in scaling.split("-") else False
+        #self.scaling_method = ("mean" if "mean" in scaling.split("-") else "max" if "per" in scaling.split("-") or self.scaling is True else "none")
+        self.scaling_method = ("mean" if "mean" in scaling.split("-") else "max")
+        #if self.dtype == "int8" or self.dtype == "int4":
+        if "int" in self.dtype:
+            self.scaling_method = "none"
+
+        self.fine_grained = True if scaling == "fine-grained" else False  
+        self.group_size = group_size if self.fine_grained is True else 1
+
         self.is_enabled = True
 
-        self.dtypes_all = ["e5m2","e4m3","e3m4","bfloat16","float16"]
+        self.dtypes_all = ["e5m2","e4m3","e3m4","fp4","bfloat16","float16"]
         self.e5m2_modes = ["rtz", "stochastic", "rne", "rnaz", "rntz", "rpinf", "rninf"]
         self.e5m2_modes += ["daz_stochastic", "daz_rne", "daz_rnaz", "daz_rntz"]
         self.e4m3_modes = ["rne", "stochastic"]
         self.e4m3_ieee_modes = ["ieee_rne", "ieee_stochastic"]
         self.e4m3_all_modes = self.e4m3_modes + self.e4m3_ieee_modes
         self.e3m4_modes = ["rne", "stochastic"]
+        self.fp4_modes = ["nearest"]
         self.bfloat16_modes = ["rne", "stochastic"]
         self.float16_modesp = ["rne", "daz_rne"]
 
@@ -66,6 +78,10 @@ class TensorQuantConfig(object):
         FLOAT16_STOCHASTIC
         FLOAT16_DAZ_RNE
         """
+        # integers of all sizes are acceptable
+        if "int" in dtype: 
+            return 
+
         assert dtype in self.dtypes_all, print("Invalid data type, list of supported types :".format(self.dtypes_all))
 
         if dtype in ["e5m2"]:
@@ -74,6 +90,8 @@ class TensorQuantConfig(object):
             assert scheme in self.e4m3_all_modes, print("scheme {} is not in ".format(scheme), self.e4m3_all_modes)
         elif dtype in ["e3m4"]:
             assert scheme in self.e3m4_modes, print("scheme {} is not in ".format(scheme), self.e3m4_modes)
+        elif dtype in ["fp4"]:
+            assert scheme in self.fp4_modes, print("scheme {} is not in ".format(scheme), self.fp4_modes)
         elif dtype in ["bfloat16"]:
             assert scheme in self.bfloat16_modes, print("scheme {} is not in ".format(scheme), self.bfloat16_modes)
         elif dtype in ["float16"]:
@@ -91,6 +109,9 @@ class TensorQuantConfig(object):
         elif self.dtype in ["e3m4"]:
             if self.scheme in self.e3m4_modes:
                 return float(30.0)
+        elif self.dtype in ["fp4"]:
+            if self.scheme in self.fp4_modes:
+                return float(1.0)
 
     def get_flt_min(self):
         if self.dtype in ["e5m2"]:
@@ -102,9 +123,13 @@ class TensorQuantConfig(object):
         elif self.dtype in ["e3m4"]:
             if self.scheme in self.e3m4_modes:
                 return float(1.5625000E-02)
+        elif self.dtype in ["fp4"]:
+            if self.scheme in self.fp4_modes:
+                return float(0.000244140625)
+
 
     def __repr__(self):
-        return "[{}, {}, {}]".format(self.dtype, self.scheme, str(self.is_enabled))
+        return "[{}, scale: {}, method: {}]".format(self.dtype+"_"+self.scheme, ("per-channel" if self.per_channel is True else "per-tensor" if self.scaling is True else "fine-grained" if self.fine_grained is True else "None"), self.scaling_method)
 
 """
   Quantization configuration for a module
@@ -164,8 +189,13 @@ class ModuleQuantConfig(object):
                     module.weight.register_hook(quantize_weight_grad)
 
     def __repr__(self):
-        return "[wt_qconfig: {}, iact_qconfig: {}, oact_qconfig: {}, wtgrad_qconfig: {}, igrad_qconfig: {}, ograd_qconfig: {}, sparse_config: {}]".format(
-            self.wt_qconfig, self.iact_qconfig, self.oact_qconfig, self.wtgrad_qconfig, self.igrad_qconfig, self.ograd_qconfig, self.sparse_config)
+        if self.igrad_qconfig is None:
+            #this is inference
+            return "[weights: {}, inputs: {}, output: {}]".format(self.wt_qconfig, self.iact_qconfig, self.oact_qconfig)
+        else :
+            #this is training
+            return "[weights: {}, inputs: {}, output: {}, weight_grad: {}, input_grad: {}, output_grad: {}]".format(
+            self.wt_qconfig, self.iact_qconfig, self.oact_qconfig, self.wtgrad_qconfig, self.igrad_qconfig, self.ograd_qconfig)
 
 """
  Quantization parameters for quantization methods used in a module.
@@ -183,8 +213,45 @@ class ModuleQuantParams(object):
         self.igrad_qparams  = igrad_qparams
         self.ograd_qparams  = ograd_qparams
 
+def quantize_to_integer(tensor, mode, inplace=False):
+    # compute tensor min and max values
+    min_val = torch.min(tensor)
+    max_val = torch.max(tensor)
+    # int8 quantization range 
+
+    nbits = int(mode.split("INT")[1])-1
+    q_min = -1*2**nbits
+    q_max = (2**nbits)-1
+
+    """
+    q_min = -128
+    q_max = 127
+    if mode == "INT4":
+        q_min = -8
+        q_max = 7
+    """
+    # compute scale and zero_point 
+    scale = (max_val - min_val) / (q_max - q_min)
+    zero_point = q_min - (min_val / scale)
+    # Quantize the input tensor using int8 representation
+    qtensor = torch.round((tensor / scale) + zero_point)
+    # Clamp the values to the int8 range
+    qtensor = torch.clamp(qtensor, q_min, q_max)
+    # Dequantize the tensor
+    dqtensor = scale * (qtensor - zero_point)
+
+    if inplace is True:
+        tensor.data.copy_(dqtensor)
+        return tensor
+    
+    return dqtensor
 
 def fpemu_device_fn(tensor, mode, inplace=True, scale=1.0):
+
+    #if "INT8" in mode or "INT4" in mode:
+    if "INT" in mode:
+        return quantize_to_integer(tensor, mode.split("_")[0], inplace=inplace)
+
     if tensor.is_cuda :
         from .pytquant.cuda import fpemu_cuda
         tensor_q = fpemu_cuda.FPEmuOp.apply(tensor, mode, inplace, scale)
@@ -203,22 +270,72 @@ def quantize_tensor(tensor, qtconfig, qtparams, inplace=False ):
     # grda number of channels, assume NCHW or KCRS layout
     if inplace is False:
         tensor_q = torch.zeros_like(tensor)
+    import statistics
+    if qtconfig.scaling is True:
+        scale = 1.0
+        if qtconfig.scaling_method == "mean":
+            mean = torch.mean(abs(torch.flatten(tensor.detach())))
+            mean = abs(mean) if abs(mean) > 1e-5 else qtconfig.get_flt_min() 
+            if abs(mean) > 0.0:
+                scale = qtconfig.get_flt_min()/ abs(mean)
+            scale = 1.0 if scale < 1.0 else scale
+        elif qtconfig.scaling_method == "max":
+            vmax = torch.max(abs(torch.flatten(tensor.detach())))
+            scale = qtconfig.get_flt_max()/vmax
+            scale = 6.55e+04 if scale > 3.275e+04 else scale
+        
+        return fpemu_device_fn(tensor, mode, inplace=inplace, scale=scale)
 
-    if qtconfig.per_channel is True:
-        channels = tensor.shape[1]
-        for c in range(0, channels):
-            sub_tensor = tensor.select(1, c).detach()
-            # extract sub_tensor scling factor. For now, set it to 1.0
-            scale = qtconfig.get_flt_max()/torch.amax(sub_tensor)
+    elif qtconfig.per_channel is True:
+        channels = tensor.shape[0]
+        for c in range(channels):
+            sub_tensor = tensor.select(0, c).detach()
+            scale = 1.0
+            if qtconfig.scaling_method == "mean":
+                #mean = abs(torch.mean(torch.flatten(sub_tensor)))
+                #mean = torch.mean(abs(torch.flatten(sub_tensor)))
+                mean = abs(torch.mode(torch.flatten(sub_tensor)).values.data)#, dim=-1, keepdim=False))
+                mean = abs(mean) if abs(mean) > 1e-6 else qtconfig.get_flt_min() 
+                if abs(mean) > 0.0:
+                    scale = qtconfig.get_flt_min()/ abs(mean)
+                scale = 1.0 if scale < 1.0 else scale
+            elif qtconfig.scaling_method == "max":
+                vmax = torch.max(abs(torch.flatten(sub_tensor)))
+                scale = qtconfig.get_flt_max()/vmax
+                scale = 6.55e+04 if scale > 3.275e+04 else scale
+
             sub_tensor = fpemu_device_fn(sub_tensor, mode, inplace=False, scale=scale)
             if inplace is False:
-                tensor_q.select(1, c).data.copy_(sub_tensor)
+                tensor_q.select(0, c).data.copy_(sub_tensor)
             else:
-                tensor.select(1, c).data.copy_(sub_tensor)
-    elif qtconfig.scaling is True:
-        # Max scaling 
-        scale = qtconfig.get_flt_max()/torch.amax(tensor)
-        tensor_q = fpemu_device_fn(tensor, mode, inplace=inplace, scale=scale)
+                tensor.select(0, c).data.copy_(sub_tensor)
+
+    elif qtconfig.fine_grained is True:
+        out_channels = tensor.shape[0]
+        for k in range(out_channels):
+            crs_tensor = tensor.select(0, k).detach()
+            in_channels = crs_tensor.shape[0]
+            chunks = max(1, int(in_channels/qtconfig.group_size))
+            sub_tensors = crs_tensor.chunk(chunks, 0)
+            for sub_tensor in sub_tensors:
+                scale = 1.0
+                if qtconfig.scaling_method == "mean":
+                    mean = abs(torch.mode(torch.flatten(sub_tensor)).values.data)
+                    mean = abs(mean) if abs(mean) > 1e-6 else qtconfig.get_flt_min() 
+                    if abs(mean) > 0.0:
+                        scale = qtconfig.get_flt_min()/ abs(mean)
+                    scale = 1.0 if scale < 1.0 else scale
+                elif qtconfig.scaling_method == "max":
+                    vmax = torch.max(abs(torch.flatten(sub_tensor)))
+                    scale = qtconfig.get_flt_max()/vmax
+             
+                sub_tensor = fpemu_device_fn(sub_tensor, mode, inplace=True, scale=scale)
+
+            if inplace is False:
+                tensor_q.select(0, k).data.copy_(crs_tensor)
+            else:
+                tensor.select(0, k).data.copy_(crs_tensor)
+
     else:
         return fpemu_device_fn(tensor, mode, inplace=inplace)
 
@@ -329,9 +446,9 @@ def calculate_int8_qparams(tensor, qconfig):
 
 # Single entry functions for getting quantization parameters
 def get_quantization_parameters(tensor, qtconfig):
-    if qtconfig.dtype in ["uint8","int8"]:
-        return calculate_int8_qparams(tensor, qtconfig)
-    elif qtconfig.dtype in ["e5m2","e4m3","e3m4","bfloat16","float16"]:
+    #if qtconfig.dtype in ["uint8","int8"]:
+    #    return calculate_int8_qparams(tensor, qtconfig)
+    if qtconfig.dtype in ["e5m2","e4m3","e3m4","fp4","bfloat16","float16","int8","int4"]:
         # Stateless quantization schemes have no parameters
         return None
     else:
@@ -340,14 +457,14 @@ def get_quantization_parameters(tensor, qtconfig):
 
 def quantize_weights_of_a_module(module, wt_qconfig, name=""):
     # TEMPORARY
-    wt_qparams = get_quantization_parameters(module.weight.data, wt_qconfig)
+    wt_qparams = None #get_quantization_parameters(module.weight.data, wt_qconfig)
     module.weight.data.copy_(quantize_tensor(module.weight.data, wt_qconfig, wt_qparams))
-    
+    """  
     if hasattr(module, 'bias'):
         if module.bias is not None: 
             bias_qparams = get_quantization_parameters(module.bias.data, wt_qconfig)
             module.bias.data.copy_(quantize_tensor(module.bias.data, wt_qconfig, wt_qparams))
-    
+    """
     return
 
 def quantize_model_weights(model, model_qconfig_dict):

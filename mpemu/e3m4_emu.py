@@ -73,12 +73,6 @@ class E3M4Emulator(object):
             print("Updated module list {}".format(self.whitelist))
             self.print_config()
 
-    def set_default_inference_qconfig(self):
-        self.emb_qconfig    = TensorQuantConfig("e3m4", "rne")#, "per-channel")
-        self.wt_qconfig     = TensorQuantConfig("e3m4", "rne")#, "per-channel")
-        self.iact_qconfig   = TensorQuantConfig("e3m4", "rne")#, "per-tensor")
-        self.oact_qconfig   = None 
-
     def create_or_update_hooks(self, model):
         self.model_qconfig_dict = get_or_update_model_quant_config_dict(model,
                                     self.whitelist, self.mod_qconfig,
@@ -136,6 +130,7 @@ class E3M4Emulator(object):
         # Adding hooks for quantizing input.
         self.hook_handles = add_quantization_hooks(model, self.model_qconfig_dict, is_training=self.is_training)
         if not self.is_training :
+            print("e3m4 : quantizing model weights..")
             quantize_model_weights(model, self.model_qconfig_dict)
             set_quantize_weights_flag(model, self.model_qconfig_dict, False)
 
@@ -161,6 +156,18 @@ class E3M4Emulator(object):
             else :
                 raise RuntimeError("e3m4_emulator: HW patching is not supported for {}, supported list of options : {}".format(patch_ops, self.patchlist))
 
+    def set_calibration_qconfig(self):
+        self.emb_qconfig    = TensorQuantConfig("e3m4", "rne", "per-tensor")
+        self.wt_qconfig     = TensorQuantConfig("e3m4", "rne", "per-tensor")
+        self.iact_qconfig   = TensorQuantConfig("e3m4", "rne", "per-tensor")
+        self.oact_qconfig   = None 
+
+    def set_default_inference_qconfig(self):
+        self.emb_qconfig    = TensorQuantConfig("e3m4", "rne", "per-channel")
+        self.wt_qconfig     = TensorQuantConfig("e3m4", "rne", "per-channel")
+        self.iact_qconfig   = TensorQuantConfig("e3m4", "rne", "per-tensor")
+        self.oact_qconfig   = None 
+
     def fuse_layers_and_quantize_model(self, model):
         if self.is_training :
             print("Warning : emulator.is_training is set to True, returning the model unchanged")
@@ -169,22 +176,19 @@ class E3M4Emulator(object):
             print("Fusing Batchnorm layers and replacing them with scale and shift")
 
         model = replace_batchnorms_with_scaleshifts(model)
-        reset_quantization_setup(model, self.model_qconfig_dict)
-        add_quantization_hooks(model, self.model_qconfig_dict)
-        #quantize_model_weights(model, self.model_qconfig_dict) # added new
-        set_quantize_weights_flag(model, self.model_qconfig_dict, False)
-        model = model.to(self.device)
-        return model
+        self.is_training = False
+        self.set_default_inference_qconfig()
+        self.prepare_model(model, self.list_exempt_layers, self.list_layers_output_fused)
 
-    def disable_datatype_emulation(self):
-        self.data_emulation = False
-        self.emb_qconfig    = None 
-        self.wt_qconfig     = None
-        self.iact_qconfig   = None
-        self.oact_qconfig   = None
-        self.igrad_qconfig  = None
-        self.ograd_qconfig  = None
-        self.wtgrad_qconfig = None
+        #reset_quantization_setup(model, self.model_qconfig_dict)
+        #add_quantization_hooks(model, self.model_qconfig_dict)
+        ##quantize_model_weights(model, self.model_qconfig_dict) # added new
+        #set_quantize_weights_flag(model, self.model_qconfig_dict, False)
+        model = model.to(self.device)
+        if self.verbose :
+            self.print_config()
+
+        return model
 
     def print_config(self):
         for key in self.model_qconfig_dict:

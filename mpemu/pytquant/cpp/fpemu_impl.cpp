@@ -1753,6 +1753,74 @@ namespace {
     }
   }
 
+  void cvt_fp32_fp4_nearest_scalar (const float *__restrict__ in, float *out,
+				int size, float scale) {
+
+    float scale_reciprocal = 1.0 / scale;
+
+#pragma omp parallel for
+    for (int gid = 0; gid < size; gid++) {
+      __float_t f;
+      float inval = scale * in[gid];
+
+      f.f = inval;
+      int exp_f = (int)(((f.u & 0x7F800000) >> 23) - 127);
+      int sign_f = (f.u & 0x80000000);
+      /* see if round up works! */
+      if (exp_f < 0 && (exp_f%2)) f.f *= 1.6;
+      /* saturate */
+      if (exp_f > 0) f.u = (sign_f | (127 << 23));
+      f.u &= 0xFF800000;
+      /* extract the new exponent */
+      exp_f = (int)(((f.u & 0x7F800000) >> 23) - 127);
+      /* round up did not work, round down */
+      if (exp_f < 0 && (exp_f%2)) f.u = (sign_f | ((exp_f + 126) << 23));
+      /* flush values smaller than 2^-12 to zero */
+      //if (exp_f < -6) f.u = 0;
+      if (exp_f < -12) f.u = 0;
+      out[gid] = (f.f * scale_reciprocal);
+    }
+  }
+
+  template < typename scalar_t >
+    void FP4_Nearest_Kernel (const scalar_t * __restrict__ in,
+	  	      scalar_t * __restrict__ out,
+		      const int size,
+		      const scalar_t in_scale,
+		      bool block_norm,
+		      int block_size) {
+    float scale = in_scale;
+    float fmax = std::numeric_limits<scalar_t>::max();
+    if (scale > fmax) {
+      fprintf(stderr,"Error: Invalid scale factor : %.2e, make sure the scale is not larger than : %.2e\n", scale, fmax);
+      exit(1);
+    }
+
+    if (block_norm == true) {
+      int nblocks = (size + (block_size - 1)) / block_size;
+
+#pragma omp parallel for
+      for (int b = 0; b < nblocks; b++) {
+	int start_index = (b * block_size);
+
+	/* handle the last block */
+	if (start_index + block_size > size)
+	  block_size = (size - start_index);
+
+	float maxval = 0.0;
+
+#pragma omp parallel for reduction (max:maxval)
+	for (int gid = start_index; gid < start_index + block_size; gid++) {
+	  maxval = (maxval < fabs (in[gid])) ? fabs (in[gid]) : maxval;
+	}
+	/* FP4 max value is 1.0 */
+	scale = 1.0/maxval;
+	cvt_fp32_fp4_nearest_scalar(&in[start_index], &out[start_index], block_size, scale);
+      }
+    } else {
+      cvt_fp32_fp4_nearest_scalar (&in[0], &out[0], size, scale);
+    }
+  }
 
   std::vector < torch::Tensor > fpemu_common_function (torch::Tensor input,
 					std::string mode,
@@ -1882,7 +1950,14 @@ namespace {
 			    float >() : output.data_ptr <
 			    float >(), size, scale, block_norm,
 			    block_size, ROUND_STOCHASTIC);
+    } else if (!mode.compare ("FP4_NEAREST")) {
+      FP4_Nearest_Kernel < float >(input.data_ptr < float >(),
+			    (inplace) ? input.data_ptr <
+			    float >() : output.data_ptr <
+			    float >(), size, scale, block_norm,
+			    block_size);
     }
+    
     if (!inplace) {
       return {
       output,};

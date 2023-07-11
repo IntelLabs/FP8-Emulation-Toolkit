@@ -11,26 +11,35 @@ import subprocess
 import itertools
 import os
 
-#model_choices  = ["alexnet", "vgg16_bn", "resnet50", "resnext50_32x4d", "mobilenet_v2", "mobilenet_v3_large", "shufflenet_v2_x1_0"]
-#model_choices  += ["mobilenet_v3_small", "wide_resnet50_2", "resnext101_32x8d", "mnasnet1_0", "efficientnet_b7", "regnet_x_32gf"]
-#model_choices   = ["alexnet", "vgg16_bn", "resnet50", "resnext50_32x4d"]
-#model_choices   = ["resnet50"]
-model_choices   = ["mobilenet_v2"]
-#model_choices   = ["wide_resnet50_2"]
-device_choices = ["cpu"]
+model_choices   = []
+model_choices   += ["resnet50"]
+model_choices   += ["wide_resnet50_2"]
+model_choices   += ["resnext50_32x4d"]
+model_choices   += ["resnext101_32x8d"]
+model_choices   += ["densenet121"]
+model_choices   += ["densenet201"]
+model_choices   += ["mobilenet_v2"]
+model_choices   += ["mobilenet_v3_small"]
+model_choices   += ["mobilenet_v3_large"]
+model_choices   += ["inception_v3"]
+model_choices   += ["squeezenet1_1"]
+model_choices   += ["efficientnet_b0"]
+
+device_choices = ["cuda:0"]
 batch_size = 64
-num_calibration_batches = 500
+data_type="e4m3" # Suported types : e5m2, e4m3, e3m4, hybrid  
+recalibrate_bn=True#False if data_type == "e4m3" else True
+num_calibration_batches = 100
 finetune_lr=0.0002
 finetune_epochs=2
-data_type="e4m3"
-hw_patch="none"
-
+cmodel="none"
 BASE_GPU_ID = 2
 NUM_GPUS = 1
 print_results = False
-data_dir="/cold_storage/ml_datasets/imagenet"
-
+verbose=True
+data_dir="/fastdata/imagenet/"
 cur_sbps = []
+
 for exp_id, exp_config in enumerate(itertools.product(model_choices, device_choices)):
     model, device = exp_config
 
@@ -41,11 +50,19 @@ for exp_id, exp_config in enumerate(itertools.product(model_choices, device_choi
         os.makedirs(output_dir)
 
     gpu_id =  BASE_GPU_ID + (exp_id % NUM_GPUS)
+    cmd = ""
+    if "cuda" in device:
+        cmd = "CUDA_VISIBLE_DEVICES={} ".format(gpu_id)
+    cmd += "python imagenet_test.py --model {} --batch-size {} --data-type {} --device {} ".format(
+                model, batch_size, data_type, device)
+    if cmodel != "none" and device == "cpu":
+        cmd += "--patch-ops {} ".format(cmodel)
+    if recalibrate_bn:
+        cmd += "--recalibrate-bn --num-calibration-batches {} ".format(num_calibration_batches)
+    if verbose:
+        cmd += "--verbose "
+    cmd += "--data-path {} --output-dir {} 2>&1 | tee {}".format(data_dir, output_dir, dump_fp)
 
-    cmd = "CUDA_VISIBLE_DEVICES={} python imagenet_test.py --model {} \
-            --batch-size {} --num-calibration-batches {} --data-type {} --patch-ops {} --device {} --data-path {} --output-dir {} 2>&1 | tee {}".format(
-                gpu_id, model, batch_size, num_calibration_batches, data_type, hw_patch, device,
-                data_dir, output_dir, dump_fp)
     print(cmd)
 
     if print_results:

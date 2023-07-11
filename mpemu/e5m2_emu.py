@@ -35,11 +35,10 @@ class E5M2Emulator(object):
         self.list_layers_output_fused = None
         self.using_apex = False
         self.use_fp16_master = False
-        self.use_bf8_master = False
-        self.use_bf8_emb = False
-        self.use_hf8_emb = False
-        self.use_hf8v2_emb = False
-        self.use_hf8_134_emb = False
+        self.use_e5m2_master = False
+        self.use_e5m2_emb = False
+        self.use_e4m3_emb = False
+        self.use_e3m4_emb = False
         self.device = device
         self.model = model
         self.global_steps = 0
@@ -104,17 +103,6 @@ class E5M2Emulator(object):
             print("Updated module list {}".format(self.whitelist))
             self.print_config()
 
-    def set_default_inference_qconfig(self):
-        self.emb_qconfig    = TensorQuantConfig("e5m2", "rne")
-        self.wt_qconfig     = TensorQuantConfig("e5m2", "rne")
-        self.iact_qconfig   = TensorQuantConfig("e5m2", "rne")
-        self.oact_qconfig   = TensorQuantConfig("e5m2", "rne")
- 
-        #self.oact_qconfig   = None 
-        self.igrad_qconfig  = None 
-        self.ograd_qconfig  = None
-        self.wtgrad_qconfig = None
-
     def _check_master_weights(self, optimizer):
         if hasattr(optimizer, "_master_params_to_model_params"):
             return True
@@ -126,28 +114,21 @@ class E5M2Emulator(object):
             if self.device == 'cuda' :
                 from .pytquant.cuda import fpemu_cuda
                 for param, (name, _ ) in zip(amp.master_params(optimizer), self.model.named_parameters()):
-                    if self.use_bf8_emb and "embeddings" in name:
+                    if self.use_e5m2_emb and "embeddings" in name:
                         if self.emb_norm :
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E5M2_STOCHASTIC", True, self.emb_norm, param.size()[1])
                         else :
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E5M2_STOCHASTIC", True)
-                    elif self.use_hf8_emb and "embeddings" in name:
+                    elif self.use_e4m3_emb and "embeddings" in name:
                         if self.emb_norm :
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E4M3_STOCHASTIC", True, self.emb_norm, param.size()[1])
                         else :
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E4M3_STOCHASTIC", True)
-                    elif self.use_hf8v2_emb and "embeddings" in name:
-                        if self.emb_norm :
-                            param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
-                            param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E4M3_IEEE_STOCHASTIC", True, self.emb_norm, param.size()[1])
-                        else :
-                            param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
-                            param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E4M3_IEEE_STOCHASTIC", True)
-                    elif self.use_hf8_134_emb and "embeddings" in name:
+                    elif self.use_e3m4_emb and "embeddings" in name:
                         if self.emb_norm :
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E3M4_STOCHASTIC", True, self.emb_norm, param.size()[1])
@@ -164,28 +145,21 @@ class E5M2Emulator(object):
             else :
                 from .pytquant.cpp import fpemu_cpp
                 for param, (name, _) in zip(amp.master_params(optimizer), self.model.named_parameters()):
-                    if self.use_bf8_emb and "embeddings" in name:
+                    if self.use_e5m2_emb and "embeddings" in name:
                         if self.emb_norm :
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E5M2_STOCHASTIC", True, self.emb_norm, param.size()[1])
                         else :
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E5M2_STOCHASTIC", True)
-                    elif self.use_hf8_emb and "embeddings" in name:
+                    elif self.use_e4m3_emb and "embeddings" in name:
                         if self.emb_norm :
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E4M3_STOCHASTIC", True, self.emb_norm, param.size()[1])
                         else :
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E4M3_STOCHASTIC", True)
-                    elif self.use_hf8v2_emb and "embeddings" in name:
-                        if self.emb_norm :
-                            param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
-                            param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E4M3_IEEE_STOCHASTIC", True, self.emb_norm, param.size()[1])
-                        else :
-                            param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
-                            param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E4M3_IEEE_STOCHASTIC", True)
-                    elif self.use_hf8_134_emb and "embeddings" in name:
+                    elif self.use_e3m4_emb and "embeddings" in name:
                         if self.emb_norm :
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                             param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E3M4_STOCHASTIC", True, self.emb_norm, param.size()[1])
@@ -202,7 +176,7 @@ class E5M2Emulator(object):
         else :
             print("e5m2_emulator: optimizer is not initialized with Apex, no action performed")
 
-    def update_bf8_master_params(self, optimizer) :
+    def update_e5m2_master_params(self, optimizer) :
         if self.using_apex and self._check_master_weights(optimizer):
             from apex import amp
             for param in amp.master_params(optimizer):
@@ -220,8 +194,8 @@ class E5M2Emulator(object):
     def update_master_params(self, optimizer) :
         if self.use_fp16_master:
             self.update_fp16_master_params(optimizer)
-        elif self.use_bf8_master:
-            self.update_bf8_master_params(optimizer)
+        elif self.use_e5m2_master:
+            self.update_e5m2_master_params(optimizer)
 
     def optimizer_step(self, optimizer):
         optimizer.step()
@@ -325,9 +299,9 @@ class E5M2Emulator(object):
         reset_quantization_setup(model, self.model_qconfig_dict)
         # Adding hooks for quantizing input.
         self.hook_handles = add_quantization_hooks(model, self.model_qconfig_dict, is_training=self.is_training)
-        #if not self.is_training :
-        #    quantize_model_weights(model, self.model_qconfig_dict)
-        #    set_quantize_weights_flag(model, self.model_qconfig_dict, False)
+        if not self.is_training :
+            quantize_model_weights(model, self.model_qconfig_dict)
+            set_quantize_weights_flag(model, self.model_qconfig_dict, False)
 
     def prepare_model(self, model, list_exempt_layers, list_layers_output_fused):
         mod_qconfig = ModuleQuantConfig(wt_qconfig=self.wt_qconfig,
@@ -348,34 +322,30 @@ class E5M2Emulator(object):
     def set_master_param_precision(self, master_params):
         if master_params == 'fp16' or master_params == 'FP16' :
             self.use_fp16_master = True
-            self.use_bf8_master = False
+            self.use_e5m2_master = False
             if self.verbose :
                 print("e5m2_emulator: Use float16 master parameters = ", self.use_fp16_master)
-        if master_params == 'bf8' or master_params == 'BF8' :
-            self.use_bf8_master = True
+        if master_params == 'e5m2' or master_params == 'BF8' :
+            self.use_e5m2_master = True
             self.use_fp16_master = False
             if self.verbose :
-                print("e5m2_emulator: Use e5m2 master parameters = ", self.use_bf8_master)
+                print("e5m2_emulator: Use e5m2 master parameters = ", self.use_e5m2_master)
  
     def set_embedding_precision(self, emb_precision, emb_norm):
-        if emb_precision == 'bf8' or emb_precision == 'BF8' :
-            self.use_bf8_emb = True
+        if emb_precision == 'e5m2' or emb_precision == 'BF8' :
+            self.use_e5m2_emb = True
             if self.verbose :
-                print("e5m2_emulator: Use e5m2 embedding table = ", self.use_bf8_emb)
-        elif emb_precision == 'hf8' or emb_precision == 'HF8' :
-            self.use_hf8_emb = True
+                print("e5m2_emulator: Use e5m2 embedding table = ", self.use_e5m2_emb)
+        elif emb_precision == 'e4m3' or emb_precision == 'HF8' :
+            self.use_e4m3_emb = True
             if self.verbose :
-                print("e5m2_emulator: Use hfloat8 embedding table = ", self.use_hf8_emb)
-        elif emb_precision == 'hf8v2' or emb_precision == 'HF8v2' :
-            self.use_hf8v2_emb = True
+                print("e5m2_emulator: Use hfloat8 embedding table = ", self.use_e4m3_emb)
+        elif emb_precision == 'e4m3_2' or emb_precision == 'HF8_2' :
+            self.use_e3m4_emb = True
             if self.verbose :
-                print("e5m2_emulator: Use hfloat8v2 embedding table = ", self.use_hf8v2_emb)
-        elif emb_precision == 'hf8_2' or emb_precision == 'HF8_2' :
-            self.use_hf8_134_emb = True
-            if self.verbose :
-                print("e5m2_emulator: Use hfloat8_134 embedding table = ", self.use_hf8_134_emb)
+                print("e5m2_emulator: Use hfloat8_134 embedding table = ", self.use_e3m4_emb)
  
-        if emb_norm and self.use_bf8_emb or self.use_hf8_emb or self.use_hf8v2_emb or self.use_hf8_134_emb :
+        if emb_norm and self.use_e5m2_emb or self.use_e4m3_emb or self.use_e3m4_emb :
             self.emb_norm = emb_norm
             if self.verbose :
                 print("e5m2_emulator: Using block normalization for embeddings")
@@ -413,6 +383,36 @@ class E5M2Emulator(object):
             else :
                 raise RuntimeError("e5m2_emulator: HW patching is not supported for {}, supported list of options : {}".format(patch_ops, self.patchlist))
 
+    def fuse_batchnorm_with_convolution(self, model):
+        from torch.nn.utils.fusion import fuse_conv_bn_eval
+        temp = []
+        for name, module in model.named_children():
+            if list(module.named_children()):
+                self.fuse_batchnorm_with_convolution(module)
+
+            if isinstance(module, torch.nn.BatchNorm2d):
+                if isinstance(temp[-1][1], torch.nn.Conv2d):
+                    setattr(model, temp[-1][0], fuse_conv_bn_eval(temp[-1][1], module))
+                    setattr(model, name, torch.nn.Identity())
+            else:
+                temp.append((name, module))
+        return model
+
+    def set_calibration_qconfig(self):
+        self.emb_qconfig    = TensorQuantConfig("e5m2", "rne")
+        self.wt_qconfig     = TensorQuantConfig("e5m2", "rne")
+        self.iact_qconfig   = TensorQuantConfig("e5m2", "rne")
+        self.oact_qconfig   = None 
+
+    def set_default_inference_qconfig(self):
+        self.emb_qconfig    = TensorQuantConfig("e5m2", "rne", "per-channel-mean")
+        self.wt_qconfig     = TensorQuantConfig("e5m2", "rne", "per-channel-mean")
+        self.iact_qconfig   = TensorQuantConfig("e5m2", "rne")#, "per-tensor-mean")
+        self.oact_qconfig   = None 
+        self.igrad_qconfig  = None 
+        self.ograd_qconfig  = None
+        self.wtgrad_qconfig = None
+
     def fuse_layers_and_quantize_model(self, model):
         if self.is_training :
             print("Warning : emulator.is_training is set to True, returning the model unchanged")
@@ -421,22 +421,19 @@ class E5M2Emulator(object):
             print("e5m2_emulator: Fusing Batchnorm layers and replacing them with scale and shift")
 
         model_fused = replace_batchnorms_with_scaleshifts(model)
-        reset_quantization_setup(model_fused, self.model_qconfig_dict)
-        add_quantization_hooks(model_fused, self.model_qconfig_dict)
-        quantize_model_weights(model, self.model_qconfig_dict) # added new
-        set_quantize_weights_flag(model_fused, self.model_qconfig_dict, False)
-        model_fused = model_fused.to(self.device)
-        return model_fused
+        self.is_training = False
+        self.set_default_inference_qconfig()
+        self.prepare_model(model_fused, self.list_exempt_layers, self.list_layers_output_fused)
 
-    def disable_datatype_emulation(self):
-        self.data_emulation = False
-        self.emb_qconfig    = None 
-        self.wt_qconfig     = None
-        self.iact_qconfig   = None
-        self.oact_qconfig   = None
-        self.igrad_qconfig  = None
-        self.ograd_qconfig  = None
-        self.wtgrad_qconfig = None
+        #reset_quantization_setup(model_fused, self.model_qconfig_dict)
+        #add_quantization_hooks(model_fused, self.model_qconfig_dict)
+        #quantize_model_weights(model, self.model_qconfig_dict) # added new
+        #set_quantize_weights_flag(model_fused, self.model_qconfig_dict, False)
+        model_fused = model_fused.to(self.device)
+        if self.verbose :
+            self.print_config()
+
+        return model_fused
 
     def print_config(self):
         for key in self.model_qconfig_dict:
@@ -447,43 +444,3 @@ class E5M2Emulator(object):
         if self.is_training :
             train_infer = "training"
         return "[Configured to run {} on {}, using AMP: {}]".format(str(train_infer), self.device, str(self.using_apex))
-
-'''
-
-'''
-def prepare_model_for_training(model, optimizer, list_exempt_layers=None, list_layers_output_fused=None,
-        master_params='fp32', emb_precision='fp32', emb_norm=False, device="cuda", patch_ops='None', 
-        verbose=False, tensor_stats=False, list_bindump_schedule=None ):
-
-    if model is None or optimizer is None:
-        raise RuntimeError("e5m2_emulator: Undefined model and optimizer, call this after model and optimizer are initilized.")
-
-    if device == 'cuda' and patch_ops != 'None':
-        raise RuntimeError("e5m2_emulator: Patching tmul/dpas ops is only alowed on 'cpu' device.")
-
-    if verbose :
-        print("e5m2_emulator: Initializing e5m2 mixed precision training..")
-        if list_exempt_layers is not None:
-            print("e5m2_emulator: The following layers are excluded : {}".format(list_exempt_layers))
-        if list_layers_output_fused is not None:
-            print("e5m2_emulator: The output is not converted to {} for the following layers : {}".format("e5m2", list_layers_output_fused))
-
-    emulator = E5M2Emulator(model, optimizer, device=device, verbose=verbose, tensor_stats=tensor_stats)
-    #emulator.model = model
-    emulator.enable_hw_patching(patch_ops)
-
-    if tensor_stats :
-        emulator.enable_tensor_stats()
-    emulator.set_tensor_bindump_schedule(list_bindump_schedule)
-    emulator.set_master_param_precision(master_params)
-    emulator.set_embedding_precision(emb_precision, emb_norm)
-
-    emulator.prepare_model(model, list_exempt_layers, list_layers_output_fused)
-
-    if emulator.patch_ops == True and len(emulator.list_unpatched):  
-        print("e5m2_emulator: Following layers are not HW_PATCH'ed because thier dimensions do not match the hardware : {} ".format(emulator.list_unpatched))
-
-    if emulator.verbose :
-        emulator.print_config()
-
-    return model, emulator

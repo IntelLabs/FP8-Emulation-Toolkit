@@ -21,7 +21,7 @@ from .module_wrappers import SparseConv2d,SparseLinear
 E4M3 Mixed Precision Emulator
 '''
 class E4M3Emulator(object):
-    def __init__(self, model, optimizer, sparse_config=None, device="cuda", verbose=False, tensor_stats=False):
+    def __init__(self, model, optimizer, sparse_config=None, device="cuda", train=False, verbose=False, tensor_stats=False):
         super(E4M3Emulator, self).__init__()
         self.whitelist = [torch.nn.Conv2d, torch.nn.Linear, torch.nn.Embedding, torch.nn.EmbeddingBag]
         self.whitelist += [Matmul, BatchMatmul, AddMatmul]
@@ -29,10 +29,11 @@ class E4M3Emulator(object):
         self.whitelist += [SparseConv2d, SparseLinear]
         self.blacklist = []
         self.list_unpatched = []
-        self.is_training = False
+        self.is_training = train
         self.list_exempt_layers = None
         self.list_layers_output_fused = None
         self.device = device
+        self.model = model
         self.patch_ops = False
         self.patch_impl = "NONE"
         self.patchlist = ["simple"]
@@ -72,12 +73,6 @@ class E4M3Emulator(object):
         if self.verbose:
             print("Updated module list {}".format(self.whitelist))
             self.print_config()
-
-    def set_default_inference_qconfig(self):
-        self.emb_qconfig    = TensorQuantConfig("e4m3", "rne")#, "per-channel")
-        self.wt_qconfig     = TensorQuantConfig("e4m3", "rne")#, "per-channel")
-        self.iact_qconfig   = TensorQuantConfig("e4m3", "rne")#, "per-tensor")
-        self.oact_qconfig   = None 
 
     def create_or_update_hooks(self, model):
         self.model_qconfig_dict = get_or_update_model_quant_config_dict(model,
@@ -136,6 +131,7 @@ class E4M3Emulator(object):
         # Adding hooks for quantizing input.
         self.hook_handles = add_quantization_hooks(model, self.model_qconfig_dict, is_training=self.is_training)
         if not self.is_training :
+            print("e4m3 : quantizing model weights..")
             quantize_model_weights(model, self.model_qconfig_dict)
             set_quantize_weights_flag(model, self.model_qconfig_dict, False)
 
@@ -161,6 +157,33 @@ class E4M3Emulator(object):
             else :
                 raise RuntimeError("e4m3_emulator: HW patching is not supported for {}, supported list of options : {}".format(patch_ops, self.patchlist))
 
+    def fuse_batchnorm_with_convolution(self, model):
+        from torch.nn.utils.fusion import fuse_conv_bn_eval
+        temp = []
+        for name, module in model.named_children():
+            if list(module.named_children()):
+                self.fuse_batchnorm_with_convolution(module)
+
+            if isinstance(module, torch.nn.BatchNorm2d):
+                if isinstance(temp[-1][1], torch.nn.Conv2d):
+                    setattr(model, temp[-1][0], fuse_conv_bn_eval(temp[-1][1], module))
+                    setattr(model, name, torch.nn.Identity())
+            else:
+                temp.append((name, module))
+        return model
+
+    def set_calibration_qconfig(self):
+        self.emb_qconfig    = TensorQuantConfig("e4m3", "rne", "per-channel")
+        self.wt_qconfig     = TensorQuantConfig("e4m3", "rne", "per-channel")
+        self.iact_qconfig   = TensorQuantConfig("e4m3", "rne", "per-tensor")
+        self.oact_qconfig   = None 
+
+    def set_default_inference_qconfig(self):
+        self.emb_qconfig    = TensorQuantConfig("e4m3", "rne", "per-channel")
+        self.wt_qconfig     = TensorQuantConfig("e4m3", "rne", "per-channel")
+        self.iact_qconfig   = TensorQuantConfig("e4m3", "rne", "per-tensor")
+        self.oact_qconfig   = None 
+
     def fuse_layers_and_quantize_model(self, model):
         if self.is_training :
             print("Warning : emulator.is_training is set to True, returning the model unchanged")
@@ -169,22 +192,19 @@ class E4M3Emulator(object):
             print("Fusing Batchnorm layers and replacing them with scale and shift")
 
         model = replace_batchnorms_with_scaleshifts(model)
-        reset_quantization_setup(model, self.model_qconfig_dict)
-        add_quantization_hooks(model, self.model_qconfig_dict)
+        #model = self.fuse_batchnorm_with_convolution(model)
+        self.is_training = False
+        self.set_default_inference_qconfig()
+        self.prepare_model(model, self.list_exempt_layers, self.list_layers_output_fused)
+        #reset_quantization_setup(model, self.model_qconfig_dict)
+        #add_quantization_hooks(model, self.model_qconfig_dict)
         #quantize_model_weights(model, self.model_qconfig_dict) # added new
-        set_quantize_weights_flag(model, self.model_qconfig_dict, False)
+        #set_quantize_weights_flag(model, self.model_qconfig_dict, False)
         model = model.to(self.device)
-        return model
+        if self.verbose :
+            self.print_config()
 
-    def disable_datatype_emulation(self):
-        self.data_emulation = False
-        self.emb_qconfig    = None 
-        self.wt_qconfig     = None
-        self.iact_qconfig   = None
-        self.oact_qconfig   = None
-        self.igrad_qconfig  = None
-        self.ograd_qconfig  = None
-        self.wtgrad_qconfig = None
+        return model
 
     def print_config(self):
         for key in self.model_qconfig_dict:
