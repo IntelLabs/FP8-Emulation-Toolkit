@@ -46,7 +46,7 @@ loss = criterion(output, target)
 net.zero_grad()     # zeroes the gradient buffers of all parameters
 #loss.backward(retain_graph=True)
 loss.backward()
-print("fc weight grads:", net.fc.weight.grad)
+#print("fc weight grads:", net.fc.weight.grad)
 
 
 torch.addmm_back = torch.addmm
@@ -60,6 +60,6 @@ output1 = net1(input_new)
 loss1 = criterion(output1, target)
 net1.zero_grad()     # zeroes the gradient buffers of all parameters
 loss1.backward()
-print("fc weight grads:", net1.fc.weight.grad)
+#print("fc weight grads:", net1.fc.weight.grad)
 
 print('Linear wtgrads L2 distance : ', torch.dist(net.fc.weight.grad, net1.fc.weight.grad, 2))

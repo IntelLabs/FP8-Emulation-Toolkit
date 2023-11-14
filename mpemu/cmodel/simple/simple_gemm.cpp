@@ -67,5 +67,5 @@ at::Tensor simple_gemm(torch::Tensor& C, torch::Tensor A, torch::Tensor B, float
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("gemm", &simple_gemm, "TMUL GEMM Implementation");
+  m.def("gemm", &simple_gemm, "Simple Matrix Engine");
 }

@@ -12,7 +12,7 @@ with open("README.md", "r") as fh:
 ext_modules.append(
         CppExtension('fpemu_cpp',
             ['mpemu/pytquant/cpp/fpemu_impl.cpp'],
-            extra_compile_args = ["-mf16c", "-mavx2", "-mavx512f", "-mavx512bw", "-mavx512dq", "-mavx512vl", "-mlzcnt", "-fopenmp", "-Wdeprecated-declarations"]
+            extra_compile_args = ["-mf16c", "-march=native", "-mlzcnt", "-fopenmp", "-Wdeprecated-declarations"]
         ),)
 
 if torch.cuda.is_available():
@@ -26,14 +26,14 @@ if torch.cuda.is_available():
 ext_modules.append(
     CppExtension('simple_gemm_dev', 
         ['mpemu/cmodel/simple/simple_gemm.cpp', 'mpemu/cmodel/simple/simple_gemm_impl.cpp', 'mpemu/cmodel/simple/simple_mm_engine.cpp'], 
-        extra_compile_args=['-O3','-msse2', '-mavx2', '-fassociative-math','-mavx512f','-fopenmp','-march=native','-Wunused-but-set-variable','-Wunused-variable'],
+        extra_compile_args=[ '-march=native', '-fopenmp','-Wunused-but-set-variable','-Wunused-variable'],
         include_dirs=['{}/'.format(os.getenv("PWD")+'/mpemu/cmodel/simple')],
     ),)
 
 ext_modules.append(
     CppExtension('simple_conv2d_dev', 
         ['mpemu/cmodel/simple/simple_conv2d.cpp', 'mpemu/cmodel/simple/simple_conv2d_impl.cpp', 'mpemu/cmodel/simple/simple_mm_engine.cpp'], 
-        extra_compile_args=['-O3','-msse2', '-mavx2', '-fassociative-math','-mavx512f','-fopenmp','-march=native','-Wunused-but-set-variable','-Wunused-variable'],
+        extra_compile_args=[ '-march=native', '-fopenmp','-Wunused-but-set-variable','-Wunused-variable'],
         include_dirs=['{}/'.format(os.getenv("PWD")+'/mpemu/cmodel/simple')],
     ),)
 

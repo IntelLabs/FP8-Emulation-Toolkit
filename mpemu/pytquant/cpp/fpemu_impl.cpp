@@ -329,6 +329,7 @@ namespace {
   template < typename scalar_t >
     void BFLOAT16_Kernel (const scalar_t * in,
 				 scalar_t * out, const int size, int rmode) {
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
     if ((size % 16) == 0) {
       if (rmode == ROUND_STOCHASTIC)
 	cvt_fp32_bf16_stochastic_intrinsic (in, out, size);
@@ -345,6 +346,9 @@ namespace {
       }
       cvt_fp32_bf16_scalar (&in[vec_size], &out[vec_size], size - vec_size, rmode);
     }
+#else
+    cvt_fp32_bf16_scalar (in, out, size, rmode);
+#endif
   }
 
   template < typename scalar_t >
@@ -790,7 +794,7 @@ namespace {
 	f.u = (f.u & 0x7F800000);
 	scale = 2.0 * f.f;
 	scale /= 16384.0;
-
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
 	if ((block_size % 32) == 0) {
 	  if (rmode == ROUND_STOCHASTIC) {
 	    cvt_fp32_e5m2_stochastic_intrinsic (&in[start_index], &out[start_index], block_size, scale);
@@ -802,8 +806,12 @@ namespace {
 	} else {
 	  cvt_fp32_e5m2_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
 	}
+#else
+	cvt_fp32_e5m2_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
+#endif
       }
     } else {
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
       if ((size % 32) == 0) {
 	if (rmode == ROUND_STOCHASTIC) {
 	  cvt_fp32_e5m2_stochastic_intrinsic (in, out, size, scale);
@@ -812,6 +820,7 @@ namespace {
 	  //cvt_fp32_e5m2_noinf_rne_intrinsic (in, out, size, scale);
         }
       } else {
+
 	int vec_size = ((int) (size / 32)) * 32;
 
 	if (vec_size > 0) {
@@ -825,6 +834,9 @@ namespace {
 	}
 	cvt_fp32_e5m2_scalar (&in[vec_size], &out[vec_size], size - vec_size, scale, rmode);
       }
+#else
+      cvt_fp32_e5m2_scalar (in, out, size, scale, rmode);
+#endif
     }
   }
 
@@ -1153,7 +1165,7 @@ namespace {
 	f.u = (f.u & 0x7F800000);
 	scale = 2.0 * f.f;
 	scale /= 8.0;
-
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
 	if ((block_size % 32) == 0) {
 	  if (rmode == ROUND_STOCHASTIC) {
 	    cvt_fp32_e4m3_stochastic_intrinsic (&in[start_index], &out[start_index], block_size, scale);
@@ -1163,8 +1175,12 @@ namespace {
 	} else {
 	  cvt_fp32_e4m3_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
 	}
+#else
+	cvt_fp32_e4m3_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
+#endif
       }
     } else {
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
       if ((size % 32) == 0) {
 	if (rmode == ROUND_STOCHASTIC) {
 	  cvt_fp32_e4m3_stochastic_intrinsic (in, out, size, scale);
@@ -1183,6 +1199,9 @@ namespace {
 	}
 	cvt_fp32_e4m3_scalar (&in[vec_size], &out[vec_size], size - vec_size, scale, rmode);
       }
+#else
+      cvt_fp32_e4m3_scalar (in, out, size, scale, rmode);
+#endif
     }
   }
 
@@ -1438,6 +1457,7 @@ namespace {
 	scale = 2.0 * f.f;
 	scale /= 8.0;
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
 	if ((block_size % 32) == 0) {
 	  if (rmode == ROUND_STOCHASTIC) {
 	    cvt_fp32_e4m3_ieee_stochastic_intrinsic (&in[start_index], &out[start_index], block_size, scale);
@@ -1447,8 +1467,12 @@ namespace {
 	} else {
 	  cvt_fp32_e4m3_ieee_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
 	}
+#else
+	cvt_fp32_e4m3_ieee_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
+#endif
       }
     } else {
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
       if ((size % 32) == 0) {
 	if (rmode == ROUND_STOCHASTIC) {
 	  cvt_fp32_e4m3_ieee_stochastic_intrinsic (in, out, size, scale);
@@ -1466,6 +1490,9 @@ namespace {
 	}
 	cvt_fp32_e4m3_ieee_scalar (&in[vec_size], &out[vec_size], size - vec_size, scale, rmode);
       }
+#else
+      cvt_fp32_e4m3_ieee_scalar (in, out, size, scale, rmode);
+#endif
     }
   }
 
@@ -1721,6 +1748,7 @@ namespace {
 	f.u = (f.u & 0x7F800000);
 	scale = 2.0 * f.f;
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
 	if ((block_size % 32) == 0) {
 	  if (rmode == ROUND_STOCHASTIC) {
 	    cvt_fp32_e3m4_stochastic_intrinsic (&in[start_index], &out[start_index], block_size, scale);
@@ -1730,8 +1758,12 @@ namespace {
 	} else {
 	  cvt_fp32_e3m4_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
 	}
+#else
+	cvt_fp32_e3m4_scalar (&in[start_index], &out[start_index], block_size, scale, rmode);
+#endif
       }
     } else {
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
       if ((size % 32) == 0) {
 	if (rmode == ROUND_STOCHASTIC) {
 	  cvt_fp32_e3m4_stochastic_intrinsic (in, out, size, scale);
@@ -1750,6 +1782,9 @@ namespace {
 	cvt_fp32_e3m4_scalar (&in[vec_size], &out[vec_size],
 			      size - vec_size, scale, rmode);
       }
+#else
+      cvt_fp32_e3m4_scalar (in, out, size, scale, rmode);
+#endif
     }
   }
 

@@ -10,11 +10,11 @@
 import torch
 from mpemu.cmodel import simple
 
-n = 2
-c = 64
+n = 16
+c = 256
 h = 28
 w = 28
-k = 64
+k = 256
 r = 3 
 s = 3
 
@@ -28,3 +28,5 @@ output_simple = simple.conv2d(input, weight, bias, stride=(2,2), padding=(2,2), 
 torch.set_printoptions(profile="full")
 
 print('Forward : L2 distance (simple) : ', torch.dist(output_ref, output_simple, 2).item())
+
+#print(output_ref-output_simple)
