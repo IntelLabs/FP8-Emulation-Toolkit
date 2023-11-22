@@ -27,7 +27,7 @@ except ImportError:
     amp = None
 
 #from train import train_one_epoch, evaluate, load_data
-from mptemu import mpt_emu
+from mpemu import mpt_emu
 
 def train_one_epoch(args, model, criterion, optimizer, emulator, data_loader, 
         device, epoch, print_freq, num_batches=None):
