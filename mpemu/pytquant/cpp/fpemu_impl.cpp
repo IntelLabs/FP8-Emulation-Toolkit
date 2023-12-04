@@ -87,6 +87,7 @@ namespace {
     return result_plus;
   }
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
   inline __m512i
     _mm512_rndxorshft128plus_epi32 (uint32_t * vs0, uint32_t * vs1,
 				    uint32_t * vs2, uint32_t * vs3) {
@@ -103,7 +104,7 @@ namespace {
     _mm512_store_epi32 (vs3, _mm512_or_epi32 (vl, vr));
     return vrplus;
   }
-
+#endif
 
   float __double2float_rn (double inval) {
     float out[4] = { 0 };
@@ -202,6 +203,7 @@ namespace {
   }
 
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
   void cvt_fp32_bf16_rne_intrinsic (const float *__restrict__ in, float *out,
 				    int size) {
 #pragma omp parallel for
@@ -278,7 +280,7 @@ namespace {
       _mm512_storeu_ps (&out[i], a);
     }
   }
-
+#endif
   void cvt_fp32_bf16_scalar (const float *in, float *out, const int size,
 			     int rmode) {
     int lshift = 16;
@@ -421,6 +423,7 @@ namespace {
   }
 
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
   __m256i _mm256_cvt2fp16_e5m2 (__m256i a, __m256i b) {
     const __m512i vnaninf = _mm512_set1_epi16 (0x7c00), vrneadd =
       _mm512_set1_epi16 (0x007f);
@@ -684,7 +687,7 @@ namespace {
       _mm512_storeu_ps (&out[i + 16], _mm512_mul_ps (a, sr_));
     }
   }
-
+#endif
   void cvt_fp32_e5m2_scalar (const float *__restrict__ in, float *out,
 			    int size, float scale, int rmode) {
     int non_mant_bits = 5 /*exp_bits */  + 1;	/* exponent + sign */
@@ -915,6 +918,7 @@ namespace {
     }
   }
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
   void cvt_fp32_e4m3_rne_intrinsic (const float *__restrict__ in, float *out,
 				   int size, float scale) {
     const __m256i vnaninf    = _mm256_set1_epi16 (0x7c00); 
@@ -1030,7 +1034,7 @@ namespace {
       _mm256_storeu_ps (&out[i + 8], _mm256_mul_ps (a, sr_));
     }
   }
-
+#endif
   void cvt_fp32_e4m3_scalar (const float *__restrict__ in, float *out,
 			    int size, float scale, int rmode) {
     int non_mant_bits = 4 /*exp_bits */  + 1;	/* exponent + sign */
@@ -1205,6 +1209,7 @@ namespace {
     }
   }
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
   void cvt_fp32_e4m3_ieee_rne_intrinsic (const float *__restrict__ in, float *out,
 				   int size, float scale) {
     const __m256i vnaninf    = _mm256_set1_epi16 (0x7c00); 
@@ -1321,7 +1326,7 @@ namespace {
       _mm256_storeu_ps (&out[i + 8], _mm256_mul_ps (a, sr_));
     }
   }
-
+#endif
   void cvt_fp32_e4m3_ieee_scalar (const float *__restrict__ in, float *out,
 			    int size, float scale, int rmode) {
     int non_mant_bits = 4 /*exp_bits */  + 1;	/* exponent + sign */
@@ -1496,6 +1501,7 @@ namespace {
     }
   }
 
+#if defined(__AVX512F__) && defined (__AVX512BW__) && defined (__AVX512DQ__) && defined (__AVX512VL__)
   void cvt_fp32_e3m4_rne_intrinsic (const float *__restrict__ in,
 				       float *out, int size, float scale) {
 
@@ -1614,7 +1620,7 @@ namespace {
       _mm256_storeu_ps (&out[i + 8], _mm256_mul_ps (a, sr_));
     }
   }
-
+#endif
   void cvt_fp32_e3m4_scalar (const float *__restrict__ in, float *out,
 				int size, float scale, int rmode) {
     int non_mant_bits = 3 /*exp_bits */  + 1;	/* exponent + sign */

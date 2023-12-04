@@ -33,4 +33,4 @@ $NUMA_RAGS $GDB_ARGS python -u run_squad.py \
   --doc_stride 128 \
   --quant_data_type=$QUANT_TYPE \
   --output_dir /tmp/debug_squad/ \
-  --no_cuda
+  #--no_cuda

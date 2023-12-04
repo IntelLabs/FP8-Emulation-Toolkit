@@ -253,10 +253,10 @@ def fpemu_device_fn(tensor, mode, inplace=True, scale=1.0):
         return quantize_to_integer(tensor, mode.split("_")[0], inplace=inplace)
 
     if tensor.is_cuda :
-        from .pytquant.cuda import fpemu_cuda
+        from .pytquant import fpemu_cuda
         tensor_q = fpemu_cuda.FPEmuOp.apply(tensor, mode, inplace, scale)
     else :
-        from .pytquant.cpp import fpemu_cpp
+        from .pytquant import fpemu_cpp
         tensor_q = fpemu_cpp.FPEmuOp.apply(tensor, mode, inplace, scale)
     return tensor_q
 

@@ -17,8 +17,15 @@ ext_modules.append(
 
 if torch.cuda.is_available():
    from torch.utils.cpp_extension import BuildExtension, CUDAExtension
-   ext_modules.append(
-        CUDAExtension('fpemu_cuda', [
+   if torch.version.hip:
+       ext_modules.append(
+            CUDAExtension('fpemu_hip', [
+            'mpemu/pytquant/hip/fpemu_impl.cpp',
+            'mpemu/pytquant/hip/fpemu_kernels.hip'],
+        ),)
+   elif torch.version.cuda:
+       ext_modules.append(
+            CUDAExtension('fpemu_cuda', [
             'mpemu/pytquant/cuda/fpemu_impl.cpp',
             'mpemu/pytquant/cuda/fpemu_kernels.cu'],
         ),)

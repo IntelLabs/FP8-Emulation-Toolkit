@@ -22,8 +22,10 @@ sys.path.append('../../mpemu')
 from mpemu.qutils import fpemu_device_fn 
 
 
-if torch.cuda.is_available():
+if torch.cuda.is_available() and torch.version.cuda:
     import cuda.fpemu as fpemu_cuda
+if torch.cuda.is_available() and torch.version.hip:
+    import hip.fpemu as fpemu_hip
 
 def check_equal(first, second, verbose):
     if verbose:
@@ -64,31 +66,20 @@ def zero_grad(variables):
 def get_grads(variables):
     return [var.grad.clone() for var in variables]
 
-def check_forward(variables, with_cuda, verbose, sparse):
+def check_forward(variables, data_format, with_cuda, verbose, sparse):
     if with_cuda:
         if not torch.cuda.is_available():
             print('CUDA is not supported on this platform ... ')
+        elif torch.version.hip:
+            cuda_values = fpemu_hip.FPEmuOp.apply(variables.cuda(), data_format.upper()) 
+            print('Forward: HIP ... ', end='')
+            print_tensor(variables, cuda_values, verbose, sparse)
         else :
-            #cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "E5M2_RNE")
-            #cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "E5M2_STOCHASTIC")
-            #cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "E4M3_RNE")
-            #cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "E4M3_STOCHASTIC")
-            #cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "E3M4_RNE")
-            #cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "E3M4_STOCHASTIC")
-            cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), "FP4_NEAREST")#, False, 1.0, True, 4)
+            cuda_values = fpemu_cuda.FPEmuOp.apply(variables.cuda(), data_format.upper())
             print('Forward: CUDA ... ', end='')
             print_tensor(variables, cuda_values, verbose, sparse)
     else :
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "E5M2_RNE")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "E5M2_STOCHASTIC")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "E4M3_RNE")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "E4M3_STOCHASTIC")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "E3M4_RNE")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "E3M4_STOCHASTIC")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "FP4_NEAREST")#, False, 1.0, True, 4)
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "INT8")
-        #cpp_values = fpemu_cpp.FPEmuOp.apply(variables, "INT4")
-        cpp_values = fpemu_device_fn(variables, "INT4", inplace=False, scale=1.0)
+        cpp_values = fpemu_cpp.FPEmuOp.apply(variables, data_format.upper)
         print('Forward: C++ ... ', end='')
         print_tensor(variables, cpp_values, verbose, sparse)
 
@@ -103,6 +94,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-sp', '--sparse', action='store_true')
 parser.add_argument('-c', '--cuda', action='store_true')
 parser.add_argument('-v', '--verbose', action='store_true')
+parser.add_argument('-df', '--dformat', default='e4m3_rne')
 
 options = parser.parse_args()
 if options.cuda:
@@ -143,9 +135,16 @@ input = torch.tensor(np.array([[ 57344.00     ,       -61440.0,        65504.0, 
                                 -2.3020705e-06, -1.5630834e-05, -7.4762434e-07,  2.1336775e-06]]), dtype=torch.float32)
 #'''
 #input = torch.randn(4, 16)
+dformats=['e5m2_rne', 'e5m2_stochastic',
+          'e4m3_rne', 'e4m3_stochastic',
+          'e3m4_rne', 'e3m4_stochastic',
+         ]
+ 
+if options.dformat not in dformats:
+   print("data format {} is not supported".format(options.dformat))
+   exit()
 
 if options.sparse :
-    check_forward(input.to_sparse(), options.cuda, options.verbose, options.sparse)
+    check_forward(input.to_sparse(), options.dformat, options.cuda, options.verbose, options.sparse)
 else :
-    check_forward(input, options.cuda, options.verbose, options.sparse)
-
+    check_forward(input, options.dformat, options.cuda, options.verbose, options.sparse)
