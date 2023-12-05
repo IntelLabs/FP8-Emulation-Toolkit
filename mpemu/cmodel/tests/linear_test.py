@@ -37,7 +37,6 @@ input = torch.randn((1, 576), dtype=torch.float32, device="cpu")
 input_new = input.to(dtype=torch.float32, copy=True)
 
 output = net(input)
-#print("fc output:", output.size(), output)
 
 target = torch.randn(120, dtype=torch.float32, device="cpu")  # a dummy target, for example
 target = target.view(1, -1)  # make it the same shape as output
@@ -46,7 +45,6 @@ loss = criterion(output, target)
 net.zero_grad()     # zeroes the gradient buffers of all parameters
 #loss.backward(retain_graph=True)
 loss.backward()
-#print("fc weight grads:", net.fc.weight.grad)
 
 
 torch.addmm_back = torch.addmm
@@ -55,11 +53,9 @@ torch.addmm = simple.addmm
 torch.matmul = simple.matmul
 
 output1 = net1(input_new)
-#print("fc output:", output1.size(), output1)
 
 loss1 = criterion(output1, target)
 net1.zero_grad()     # zeroes the gradient buffers of all parameters
 loss1.backward()
-#print("fc weight grads:", net1.fc.weight.grad)
 
 print('Linear wtgrads L2 distance : ', torch.dist(net.fc.weight.grad, net1.fc.weight.grad, 2))
