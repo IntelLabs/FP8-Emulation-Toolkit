@@ -30,43 +30,41 @@ def is_transposed(input):
 def addmm(input, mat1, mat2, beta=1.0, alpha=1.0, out=None):
     if input.dtype == torch.float32 and mat1.dtype == torch.float32 and \
                   mat1.dim() == 2 and mat2.dim() == 2 and mat1.size(1) == mat2.size(0):
-        if out:
-            output = out
-        else:
-            output = torch.zeros([mat1.size(0), mat2.size(1)])
         a_mat, a_trans = is_transposed(mat1)
         b_mat, b_trans = is_transposed(mat2)
-        output = SimpleAddmm.apply(output, input, a_mat, b_mat, alpha, beta, a_trans, b_trans)
-        ret = output
+        output = out
+        if out is None:
+            output = torch.zeros([a_mat.size(0) if not a_trans else a_mat.size(1), b_mat.size(0) if b_trans else b_mat.size(1)])
+
+        return SimpleAddmm.apply(output, input, a_mat, b_mat, alpha, beta, a_trans, b_trans)
     else:
         warnings.warn('simple.addmm does not support the input dimensions - input :{}, mat1: {}, mat2: {}, falling back to torch.addmm'.format(
                               input.size(), mat1.size(), mat2.size()))
-        ret = fallback_addmm(input, mat1, mat2, beta=beta, alpha=alpha, out=out)
-    return ret
+        return fallback_addmm(input, mat1, mat2, beta=beta, alpha=alpha, out=out)
 
 def matmul(input, other, out=None):
     if input.dtype == torch.float32 and other.dtype == torch.float32 and \
                 input.dim() == 2 and other.dim() == 2 and input.size(1) == other.size(0):
-        if out:
-            output = out
-        else:
-            output = torch.zeros([input.size(0), other.size(1)])
         a_mat, a_trans = is_transposed(input)
         b_mat, b_trans = is_transposed(other)
-        output = SimpleMatmul.apply(output, a_mat, b_mat, 1.0, a_trans, b_trans)
-        return output
+        output = out
+        if out is None:
+            output = torch.zeros([a_mat.size(0) if not a_trans else a_mat.size(1), b_mat.size(0) if b_trans else b_mat.size(1)])
+
+        return SimpleMatmul.apply(output, a_mat, b_mat, 1.0, a_trans, b_trans)
+
     # Batch MatMul implementation
     elif input.dtype == torch.float32 and other.dtype == torch.float32 and \
                 input.dim() == 3 and other.dim() == 2 and input.size(2) == other.size(0):
-        if out:
-            output = out
-        else:
-            output = torch.zeros([input.size(0), input.size(1), other.size(1)])
         a_mat, a_trans = is_transposed(input)
         b_mat, b_trans = is_transposed(other)
-        output = torch.stack(tuple([SimpleMatmul.apply(out1, a_mat1, b_mat, 1.0, a_trans, b_trans) \
+        output = out
+        if out is None:
+            output = torch.zeros([a_mat.size(0) if not a_trans else a_mat.size(1), a_mat.size(1) if not a_trans else a_mat.size(0), 
+                                  b_mat.size(0) if b_trans else b_mat.size(1)])
+
+        return torch.stack(tuple([SimpleMatmul.apply(out1, a_mat1, b_mat, 1.0, a_trans, b_trans) \
                                   for a_mat1, out1 in zip(a_mat, output)]))
-        return output
     else:
         warnings.warn('simple.matmul does not support the input dimensions - input :{}, other: {}, falling back to torch.matmul'.format(
                               input.size(), other.size()))
@@ -75,14 +73,13 @@ def matmul(input, other, out=None):
 def mm(input, mat2, out=None):
     if input.dtype == torch.float32 and mat2.dtype == torch.float32 and \
         input.dim() == 2 and mat2.dim() == 2 and input.size(1) == mat2.size(0):
-        if out:
-            output = out
-        else:
-            output = torch.zeros([input.size(0), mat2.size(1)])
         a_mat, a_trans = is_transposed(input)
         b_mat, b_trans = is_transposed(mat2)
-        output = SimpleMatmul.apply(output, a_mat, b_mat, 1.0, a_trans, b_trans)
-        return output
+        output = out
+        if out is None:
+            output = torch.zeros([a_mat.size(0) if not a_trans else a_mat.size(1), b_mat.size(0) if b_trans else b_mat.size(1)])
+
+        return SimpleMatmul.apply(output, a_mat, b_mat, 1.0, a_trans, b_trans)
     else:
         warnings.warn('simple.mm does not support the input dimensions - input :{}, mat2: {}, falling back to torch.mm'.format(
                               input.size(), mat2.size()))

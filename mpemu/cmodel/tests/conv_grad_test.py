@@ -10,12 +10,13 @@
 import torch
 import time
 from mpemu.cmodel import simple
+import numpy as np
 
 n = 64
 c = 256
 h = 28
 w = 28
-k = 512
+k = 256
 r = 3
 s = 3
 stride = 2
@@ -25,8 +26,13 @@ a = torch.rand((n,c,h,w), dtype=torch.float32)
 b = torch.rand((k,c,r,s), dtype=torch.float32)
 bias = torch.rand((k), dtype=torch.float32)
 
+#a = torch.rand((n,c,h,w), dtype=torch.float32)
+#b = torch.rand((k,c,r,s), dtype=torch.float32)
+#bias = torch.rand((k), dtype=torch.float32)
+
 a64 = a.to(dtype=torch.float64, copy=True)
 b64 = b.to(dtype=torch.float64, copy=True)
+bias64 = bias.to(dtype=torch.float64, copy=True) 
 
 a.requires_grad=True
 b.requires_grad=True
@@ -34,14 +40,19 @@ a64.requires_grad=True
 b64.requires_grad=True
 
 ref_time = time.time()
-z = torch.nn.functional.conv2d(a64, b64, bias, stride=(stride,stride), padding=(pad,pad), dilation=(1,1), groups=1) 
+z = torch.nn.functional.conv2d(a64, b64, bias64, stride=(stride,stride), padding=(pad,pad), dilation=(1,1), groups=1) 
 ref_time = time.time()-ref_time
 
 simple_time = time.time()
 z2 = simple.conv2d(a, b, bias, stride=(stride,stride), padding=(pad,pad), dilation=(1,1), groups=1) 
-simple_time = time.time()-simple_time
+ref_time = time.time()-simple_time
+
+ref_time = time.time()
+z3 = torch.nn.functional.conv2d(a, b, bias, stride=(stride,stride), padding=(pad,pad), dilation=(1,1), groups=1) 
+ref_time = time.time()-ref_time
 
 #print("Forward Time : ref_time: {}, simple_time: {} ".format(ref_time, simple_time))
+print('Forward: L2 distance f32 output : ', torch.dist(z3.to(dtype=torch.float64, copy=True), z, 2).item())
 print('Forward: L2 distance output : ', torch.dist(z2.to(dtype=torch.float64, copy=True), z, 2).item())
 
 ref_time = time.time()

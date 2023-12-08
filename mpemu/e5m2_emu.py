@@ -112,7 +112,7 @@ class E5M2Emulator(object):
         if self.using_apex and self._check_master_weights(optimizer):
             from apex import amp
             if self.device == 'cuda' :
-                from .pytquant.cuda import fpemu_cuda
+                from .pytquant import fpemu_cuda
                 for param, (name, _ ) in zip(amp.master_params(optimizer), self.model.named_parameters()):
                     if self.use_e5m2_emb and "embeddings" in name:
                         if self.emb_norm :
@@ -143,7 +143,7 @@ class E5M2Emulator(object):
                         self.tb_writer.add_scalar(name+"_absmax", torch.max(torch.abs(param)), global_step=self.global_steps)
                         self.tb_writer.add_scalar(name+"_absmin", torch.min(torch.abs(param)), global_step=self.global_steps)
             else :
-                from .pytquant.cpp import fpemu_cpp
+                from .pytquant import fpemu_cpp
                 for param, (name, _) in zip(amp.master_params(optimizer), self.model.named_parameters()):
                     if self.use_e5m2_emb and "embeddings" in name:
                         if self.emb_norm :
@@ -181,11 +181,11 @@ class E5M2Emulator(object):
             from apex import amp
             for param in amp.master_params(optimizer):
                 if self.device == 'cuda' :
-                    from .pytquant.cuda import fpemu_cuda
+                    from .pytquant import fpemu_cuda
                     param.data = fpemu_cuda.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                     param.data = fpemu_cuda.FPEmuOp.apply(param.data, "E5M2_STOCHASTIC", True)
                 else :
-                    from .pytquant.cpp import fpemu_cpp
+                    from .pytquant import fpemu_cpp
                     param.data = fpemu_cpp.FPEmuOp.apply(param.data, "FLOAT16_STOCHASTIC", True)
                     param.data = fpemu_cpp.FPEmuOp.apply(param.data, "E5M2_STOCHASTIC", True)
         else :

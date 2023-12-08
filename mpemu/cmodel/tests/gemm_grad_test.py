@@ -32,7 +32,9 @@ c64.requires_grad=True
 
 z = torch.addmm(c64, a64, b64.t())
 z2 = simple.addmm(c, a, b.t())
+z3 = simple.addmm(c, a, b.t())
 
+print('Forward :L2 distance f32 output: ', torch.dist(z3.to(dtype=torch.float64, copy=True), z, 2).item())
 print('Forward :L2 distance output: ', torch.dist(z2.to(dtype=torch.float64, copy=True), z, 2).item())
 
 (z2[0, 0] + z2[0,1]).sum().backward()

@@ -209,16 +209,20 @@ int simple_sgemm_impl( char* transa, char* transb, int m, int n, int k,
 #endif
    for ( o = 0; o < mym; o += 16 ) {
     for ( p = 0; p < myn; p += 16 ) {
-      float ctmp[256];
+
+      /* C initialized to zero */
+      __attribute__ ((aligned(64))) float ctmp[256];
       for ( pp = 0; pp < 16; pp++ ) {
         for ( oo = 0; oo < 16; oo++ ) {
           ctmp[(pp*16)+oo] = 0.0f;
         }
       }
+      /* compute a 16x16x64 block */
       for ( q = 0; q < myk; q += 64 ) {
-	MMEngine_avx2_ps(mym, myn, myk, alpha, &(myA[(mylda*q)+o]), mylda,
-			         &(myB[(myldb*p)+q]), myldb, beta, ctmp, myldc);
+	MMEngine_avx2_ps(16, 16, 64, alpha, &(myA[(mylda*q)+o]), mylda,
+			         &(myB[(myldb*p)+q]), myldb, beta, ctmp, 16);
       }
+      /* post accumulation */
       for ( pp = 0; pp < 16; pp++ ) {
         for ( oo = 0; oo < 16; oo++ ) {
           myC[((p+pp)*myldc)+(o+oo)] += ((alpha)*ctmp[(pp*16)+oo]) + ((beta)*myC[((p+pp)*myldc)+(o+oo)]);

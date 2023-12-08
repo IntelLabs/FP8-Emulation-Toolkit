@@ -1,6 +1,6 @@
 # FP8 Emulation Toolkit
 ## Introduction
-This repository provides PyTorch tools to emulate the new `FP8` formats on top of existing floating point hardware from Intel (FP32) and NVIDIA (FP16). In addition to the two formats `E5M2` and `E4M3` defined in the joint specification from <a href=https://arxiv.org/pdf/2209.05433https://arxiv.org/pdf/2209.05433 target="_blank">ARM-Intel-NVIDIA</a>, the toolkit also suports a third variant named `E3M4` which follows the guidelines established for `E4M3` format.
+This repository provides PyTorch tools to emulate the new `FP8` formats on top of existing floating point hardware from Intel, AMD and NVIDIA. In addition to the two formats `E5M2` and `E4M3` defined in the joint specification from <a href=https://arxiv.org/pdf/2209.05433https://arxiv.org/pdf/2209.05433 target="_blank">ARM-Intel-NVIDIA</a>, the toolkit also suports a third variant named `E3M4` which follows the guidelines established for `E4M3` format.
 
 Following table shows the binary formats and the numeric range:
 
@@ -23,17 +23,22 @@ Follow the instructions below to install FP8 Emulation Toolkit in a Python virtu
 Alternatively, this installation can also be performed in a docker environment.
 
 ### Requirements
+This package can be installed on the following hardware.
+
+* x86 CPUs from AMD and Intel 
+* GPU devices from NVIDIA(CUDA) and AMD(HIP)
+
 Install or upgrade the following packages on your linux machine.
 
 * Python >= 3.8.5
-* CUDA >= 11.1
+* NVIDIA CUDA >= 11.1 or AMD ROCm >= 5.6
 * gcc >= 8.4.0
 
 Make sure these versions are reflected in the `$PATH`
 
 #### Target Hardware
-* CPU >= Icelake Xeon
-* GPU >= V100
+* CPU >= All x86 
+* GPU >= V100, MI2XX 
 
 ### Create a Python virtual environment
 ```
@@ -60,6 +65,14 @@ The emulated FP8 formats can be experimented with by integrated them into standa
 ## Related Work
 This implementation is based on the following research. Check out the source material for more details on the training and inference methods. 
 
+```
+@article{shen2023efficient,
+  title={Efficient Post-training Quantization with FP8 Formats},
+  author={Shen, Haihao and Mellempudi, Naveen and He, Xin and Gao, Qun and Wang, Chang and Wang, Mengni},
+  journal={arXiv preprint arXiv:2309.14592},
+  year={2023}
+}
+```
 ```
 @misc{mellempudi2019mixed,
       title={Mixed Precision Training With 8-bit Floating Point}, 
