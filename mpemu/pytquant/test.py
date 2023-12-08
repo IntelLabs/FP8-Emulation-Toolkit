@@ -79,7 +79,7 @@ def check_forward(variables, data_format, with_cuda, verbose, sparse):
             print('Forward: CUDA ... ', end='')
             print_tensor(variables, cuda_values, verbose, sparse)
     else :
-        cpp_values = fpemu_cpp.FPEmuOp.apply(variables, data_format.upper)
+        cpp_values = fpemu_cpp.FPEmuOp.apply(variables, data_format.upper())
         print('Forward: C++ ... ', end='')
         print_tensor(variables, cpp_values, verbose, sparse)
 
