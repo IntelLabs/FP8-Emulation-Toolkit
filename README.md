@@ -1,4 +1,12 @@
 # FP8 Emulation Toolkit
+
+> [!CAUTION]
+> **PROJECT NOT UNDER ACTIVE MANAGEMENT**
+> * This project will no longer be maintained by Intel.
+> * Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project.  
+> * Intel no longer accepts patches to this project.  
+> * If you have an ongoing need to use this project, are interested in independently developing it, or would like to maintain patches for the open source software community, please create your own fork of this project.  
+
 ## Introduction
 This repository provides PyTorch tools to emulate the new `FP8` formats on top of existing floating point hardware from Intel, AMD and NVIDIA. In addition to the two formats `E5M2` and `E4M3` defined in the joint specification from <a href=https://arxiv.org/pdf/2209.05433https://arxiv.org/pdf/2209.05433 target="_blank">ARM-Intel-NVIDIA</a>, the toolkit also suports a third variant named `E3M4` which follows the guidelines established for `E4M3` format.
 
